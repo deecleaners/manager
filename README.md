@@ -11,6 +11,24 @@ and logo (see `../dee_manager/`).
 business data itself — it reads and writes the workbook through a small JSON
 API.
 
+## Live system
+
+| Piece | Where |
+|---|---|
+| **Web app (frontend)** | https://deecleaners.github.io/manager/ *(enabled via GitHub Pages)* |
+| **API (Apps Script)** | `https://script.google.com/macros/s/AKfycbxgewP_sTZEsqdfVp6Eqz_rZLYcg3LrdEaFgcWgn9z-rh6F2aAwWfUbIlyU2oefw2X0/exec` (deployment `AKfycbxgewP…`) |
+| **Backend code** | this repo, `webapp/backend/Code.gs` — pasted into the Apps Script project bound to the Sheets workbook (also shared as library `1-8YiK-LBlVAgvX-9YeYRSDt7CbTP4JWPzvzXD7kSkY0KoUI3rWzZAlE4`) |
+| **Source code** | https://github.com/deecleaners/manager |
+
+The frontend ships with the live API URL pre-filled — on first open, just
+press **Connect** (Settings ▸ API to change it per device).
+
+> ⚠️ **After changing `Code.gs`:** paste the new code into the Apps Script
+> project, then **Deploy ▸ Manage deployments ▸ ✎ Edit ▸ Version: New
+> version** — the web app runs a frozen snapshot and does not pick up code
+> changes automatically. If the backend is referenced as a library, update
+> the library version in the bound project as well.
+
 ```
 dee_cleaners_system/
 ├── Dee_Cleaners_Management.xlsx   ← the workbook (built by the script below)
@@ -31,11 +49,9 @@ dee_cleaners_system/
 node webapp/dev/mock-server.js     # serves the app + API on http://localhost:8787
 ```
 
-Open **http://localhost:8787** in a browser. On the Connect screen enter:
-
-```
-http://localhost:8787/api
-```
+Open **http://localhost:8787/?api=http://localhost:8787/api** — the `?api=`
+override points the app at the mock server instead of the live deployment.
+(Or open the app normally and set the API URL in Settings ▸ API.)
 
 The mock server keeps data in memory only (restart = reset) and ignores the
 API key. It is an exact twin of `Code.gs` — same actions, same responses —
@@ -59,7 +75,10 @@ so it is also how you test changes before deploying to Google Sheets.
    requires that key on every request.
 5. **Deploy ▸ New deployment ▸ Web app**
    - Execute as: **Me**
-   - Who has access: **Anyone**
+   - Who has access: **Anyone** *(if the app shows a Google login page
+     instead of the Connect screen, the deployment is set to "Only myself"
+     or "Anyone with Google account" — edit the deployment and set
+     "Who has access" to "Anyone".)*
    - Copy the **Web app URL** — this is your API URL.
 
 The backend is self-healing: on first request it makes sure every sheet,

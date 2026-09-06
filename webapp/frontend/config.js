@@ -11,12 +11,13 @@
  */
 window.DEE_CLEANERS_CONFIG = {
   /**
-   * Default API URL — optional; leave '' to show the Connect screen.
-   * You can also connect quickly by opening the app with
+   * Default API URL — the live Dee Cleaners Apps Script deployment.
+   * Change it in the app (Settings ▸ API), or override per-open with
    * ?api=http://localhost:8787/api  (e.g. for the mock server).
    */
   apiUrl: localStorage.getItem('dee_api_url') ||
-    new URLSearchParams(location.search).get('api') || '',
+    new URLSearchParams(location.search).get('api') ||
+    'https://script.google.com/macros/s/AKfycbxgewP_sTZEsqdfVp6Eqz_rZLYcg3LrdEaFgcWgn9z-rh6F2aAwWfUbIlyU2oefw2X0/exec',
   apiKey: localStorage.getItem('dee_api_key') || '',
   appName: 'Dee Cleaners',
   currency: 'TZS'
