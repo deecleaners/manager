@@ -1,0 +1,22 @@
+{
+  "name": "Dee Cleaners — Business Management",
+  "short_name": "Dee Cleaners",
+  "description": "Dee Cleaners business management system: cleaning, laundry, sofa, fumigation, gardening and househelp services. Magomeni, Mikumi.",
+  "id": "dee-cleaners-app",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#213668",
+  "theme_color": "#213668",
+  "lang": "en",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "New Order", "url": "./index.html#/orders?new=1", "description": "Create a new service order" },
+    { "name": "Dashboard", "url": "./index.html#/dashboard", "description": "Business overview" }
+  ]
+}

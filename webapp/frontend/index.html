@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#213668">
+  <meta name="description" content="Dee Cleaners business management system — cleaning, laundry, sofa, fumigation, gardening and househelp services. Magomeni, Mikumi.">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Dee Cleaners">
+  <title>Dee Cleaners — Business Management</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="favicon.ico">
+  <link rel="icon" href="favicon.png" type="image/png">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app" class="app">
+    <!-- Sidebar (desktop) -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <img src="icons/logo.png" alt="Dee Cleaners logo" class="brand-logo">
+        <div class="brand-text">
+          <span class="brand-name">Dee Cleaners</span>
+          <span class="brand-tag">Business Management</span>
+        </div>
+      </div>
+      <nav class="sidebar-nav" id="sidebar-nav" aria-label="Main navigation"></nav>
+      <div class="sidebar-foot">
+        <span class="api-dot" id="api-dot" title="API connection status"></span>
+        <span id="api-status-text">Connecting…</span>
+      </div>
+    </aside>
+
+    <!-- Main column -->
+    <div class="main-col">
+      <header class="topbar">
+        <button class="icon-btn" id="menu-btn" aria-label="Open menu">☰</button>
+        <div class="topbar-title" id="page-title">Dashboard</div>
+        <div class="topbar-actions">
+          <a href="#/orders?new=1" class="btn btn-primary btn-sm" id="quick-new-order">＋ New Order</a>
+        </div>
+      </header>
+
+      <main class="content" id="main-content" tabindex="-1"></main>
+    </div>
+
+    <!-- Bottom navigation (mobile) -->
+    <nav class="bottom-nav" id="bottom-nav" aria-label="Mobile navigation"></nav>
+  </div>
+
+  <!-- Modal root -->
+  <div class="modal-backdrop" id="modal-backdrop" hidden>
+    <div class="modal" id="modal" role="dialog" aria-modal="true">
+      <div class="modal-head">
+        <h3 id="modal-title">Title</h3>
+        <button class="icon-btn" id="modal-close" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+
+  <!-- Toasts -->
+  <div class="toast-wrap" id="toast-wrap" aria-live="polite"></div>
+
+  <!-- Confirm dialog -->
+  <div class="modal-backdrop" id="confirm-backdrop" hidden>
+    <div class="modal modal-sm" role="alertdialog">
+      <div class="modal-head"><h3 id="confirm-title">Confirm</h3></div>
+      <div class="modal-body" id="confirm-body"></div>
+      <div class="modal-foot" id="confirm-foot"></div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
