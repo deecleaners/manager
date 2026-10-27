@@ -3,7 +3,7 @@
  * Static assets: cache-first. API calls: always network (Google Sheets is
  * the single source of truth, so business data is never cached here).
  */
-const CACHE = 'dee-cleaners-v3';
+const CACHE = 'dee-cleaners-v4';
 const ASSETS = [
   './', './index.html', './styles.css', './app.js', './config.js',
   './manifest.json', './icons/logo.png', './icons/icon-192.png',

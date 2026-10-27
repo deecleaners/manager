@@ -41,6 +41,9 @@
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
+/* Component display rules (e.g. .modal-backdrop { display:flex }) must never
+   override the hidden attribute — otherwise hidden overlays cover the app. */
+[hidden] { display: none !important; }
 html { -webkit-text-size-adjust: 100%; }
 body {
   font-family: var(--font);
