@@ -117,7 +117,7 @@ TERMS = {
         ('3. Payment Terms', [
             'The employer agrees to pay the househelp on time, as stipulated in the signed agreement. The payment should be made monthly/weekly, by Cash, Mobile Payments or Bank deposits.',
             'Any salary deductions must be transparent and communicated in advance, e.g., for damages or non-performance.',
-            'Dee Cleaners is entitled to a one-time agency fee paid by the employer upon contract initiation.']),
+            'Dee Cleaners is entitled to a one-time commission (agency fee) paid by the employer upon contract initiation: 6 Months = 150,000 TZS; 1 Year = 250,000 TZS; Forever = a fixed amount of 300,000 up to 500,000 TZS.']),
         ('4. Accommodation and Meals (for live-in househelps)', [
             'If the househelp is live-in, the employer must provide adequate accommodation (clean and safe living quarters) and sufficient meals or an allowance for food.',
             'Any additional expenses related to the househelp’s living conditions should be clearly agreed upon and documented.']),
@@ -130,6 +130,7 @@ TERMS = {
             'In cases of abuse, harassment, unsafe working conditions, serious misconduct, or any situation that affects the househelp’s well-being, the househelp may terminate the agreement immediately and inform Dee Cleaners.',
             'In the event of immediate termination, Dee Cleaners must be notified within 24 hours.',
             'If the employer delays or fails to pay the househelp’s salary as agreed, Dee Cleaners reserves the right to terminate its services to the employer and may refuse to provide any replacement househelp or future placements.',
+            'If the employer (the second party) decides to terminate the contract, the employer pays a termination fee of 500,000 TZS. Once the termination fee is paid, Dee Cleaners is no longer responsible for that househelp.',
             'Dee Cleaners reserves the right to review each termination case individually and make a final decision based on the circumstances of the case.']),
         ('7. Health and Safety', [
             'The employer must provide a safe and hygienic environment for the househelp to work in.',
@@ -173,7 +174,7 @@ TERMS = {
         ('3. Masharti ya Malipo', [
             'Mwajiri anakubali kumlipa mfanyakazi wa nyumbani kwa wakati, kama ilivyoelezwa katika mkataba uliotiwa saini. Malipo yafanyike kila mwezi/kila wiki, kwa Fedha Taslimu, Malipo ya Simu au Amana za Benki.',
             'Makato yoyote ya mshahara lazima yawe wazi na yatangazwe mapema, kwa mfano, kwa uharibifu au kushindwa kutekeleza majukumu.',
-            'Dee Cleaners ana haki ya ada ya wakala ya mara moja inayolipwa na mwajiri mwanzoni mwa mkataba.']),
+            'Dee Cleaners ana haki ya kamisheni (ada ya wakala) ya mara moja inayolipwa na mwajiri mwanzoni mwa mkataba: Miezi 6 = 150,000 TZS; Mwaka 1 = 250,000 TZS; Milele = kiasi maalum cha 300,000 hadi 500,000 TZS.']),
         ('4. Malazi na Milo (kwa wafanyakazi wa ndani)', [
             'Ikiwa mfanyakazi anaishi nyumbani (live-in), mwajiri lazima atoe malazi ya kutosha (makazi safi na salama) na milo ya kutosha au posho ya chakula.',
             'Gharama zozote za ziada zinazohusiana na hali ya maisha ya mfanyakazi zipaswa kukubaliwa wazi na kuandikwa.']),
@@ -186,6 +187,7 @@ TERMS = {
             'Katika hali za unyanyasaji, usumbufu, mazingira hatari ya kazi, utovu mkubwa wa nidhamu, au hali yoyote inayoathiri ustawi wa mfanyakazi, mfanyakazi anaweza kusitisha mkataba mara moja na kumjulisha Dee Cleaners.',
             'Katika tukio la kusitishwa mara moja, Dee Cleaners lazima aarifiwe ndani ya saa 24.',
             'Ikiwa mwajiri anachelewesha au kushindwa kulipa mshahara wa mfanyakazi kama ilivyokubaliwa, Dee Cleaners ana haki ya kusitisha huduma zake kwa mwajiri na anaweza kukataa kutoa mfanyakazi mbadala au nafasi za baadaye.',
+            'Ikiwa mwajiri (upande wa pili) ataamua kusitisha mkataba, mwajiri analipa ada ya kusitisha ya 500,000 TZS. Baada ya kulipa ada hiyo, Dee Cleaners hana jukumu tena kwa mfanyakazi huyo.',
             'Dee Cleaners ana haki ya kupitia kila kesi ya kusitishwa kibinafsi na kufanya uamuzi wa mwisho kulingana na hali ya kesi.']),
         ('7. Afya na Usalama', [
             'Mwajiri lazima atoe mazingira salama na safi kwa mfanyakazi kufanyia kazi.',

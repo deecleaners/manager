@@ -108,7 +108,7 @@ SETTINGS_INFO = [
     ("Room Pricing Note", "Bei zinapungua au Kuongezeka kulingana na ukubwa wa chumba (prices may decrease or increase depending on room size)"),
     ("Live-in Working Hours", "5:00 a.m. - 6:30 p.m."),
     ("Minimum Work Duration (months)", 3),
-    ("Agency Fee Note", "One-time agency fee paid by the employer upon contract initiation"),
+    ("Agency Fee Note", "Househelp commission by term: 6 Months = 150,000 | 1 Year = 250,000 | Forever = 300,000 up to 500,000 (fixed). Employer contract termination fee = 500,000 (after payment Dee Cleaners is no longer responsible for the househelp)."),
     ("Payment Policy Note", "All househelp service payments are made directly to Dee Cleaners, which handles salary disbursement"),
     ("Logo Reference", "assets/dee_cleaners_logo/dee_cleaners_logo.png"),
 ]
@@ -132,6 +132,9 @@ CLEANING_SERVICES = [
     ("Sitting Room & 4 Bedrooms", 300000, 300000, "Rooms With Furniture Cleaning", "Yes", ""),
     ("Sitting Room & 5 Bedrooms", 350000, 350000, "Rooms With Furniture Cleaning", "Yes", ""),
     ("Sitting Room & 6 Bedrooms", 450000, 450000, "Rooms With Furniture Cleaning", "Yes", ""),
+    ("Shop Cleaning", 50000, 180000, "Cleaning", "Yes", "Normal shop cleaning"),
+    ("Deep Shop Cleaning", 200000, 500000, "Cleaning", "Yes",
+     "Starts from 200,000 depending on shop size"),
 ]
 
 SOFA_SERVICES = [
@@ -259,7 +262,7 @@ PLACEMENTS_HEADERS = [
     "Placement ID", "Househelp ID", "Employer ID", "Category", "Job Description",
     "Salary", "Payment Frequency", "Start Date", "Expected End Date", "Status",
     "Contract Status", "Live-in/Live-out", "Working Hours", "Accommodation",
-    "Meals", "Agency Fee", "Notes",
+    "Meals", "Agency Fee", "Notes", "Placement Term", "Termination Fee",
 ]
 
 HOUSEHELP_PAYMENTS_HEADERS = [
@@ -292,6 +295,11 @@ ATTENDANCE_HEADERS = [
     "Hours", "Status", "Notes",
 ]
 
+REMINDERS_HEADERS = [
+    "Reminder ID", "Customer", "Issue / Reminder Note", "Day of Month",
+    "Next Due Date", "Last Sent", "Notes",
+]
+
 # --------------------------------------------------------------------------
 # Dashboard KPI rows: (label, formula)  — computed live from the data sheets
 # --------------------------------------------------------------------------
@@ -311,6 +319,7 @@ DASHBOARD_KPIS = [
     ("Contracts Expiring Soon", '=COUNTIFS(Contracts!$F$4:$F$500,">="&TODAY(),Contracts!$F$4:$F$500,"<="&(TODAY()+30),Contracts!$I$4:$I$500,"Active")'),
     ("Open Complaints", '=COUNTIF(Complaints!$J$4:$J$500,"Reported")+COUNTIF(Complaints!$J$4:$J$500,"Under Review")+COUNTIF(Complaints!$J$4:$J$500,"Mediation")'),
     ("Replacement Requests", '=COUNTIF(Replacements!$I$4:$I$500,"Requested")+COUNTIF(Replacements!$I$4:$I$500,"In Progress")'),
+    ("Reminders Due", '=COUNTIF(Reminders!$E$4:$E$500,"<="&TODAY())'),
 ]
 
 DATA_SHEETS = [
@@ -325,6 +334,7 @@ DATA_SHEETS = [
     ("Complaints", COMPLAINTS_HEADERS, 500),
     ("Replacements", REPLACEMENTS_HEADERS, 500),
     ("Attendance", ATTENDANCE_HEADERS, 500),
+    ("Reminders", REMINDERS_HEADERS, 500),
 ]
 
 

@@ -40,6 +40,29 @@ const daysAgo = n => { const d = new Date(); d.setDate(d.getDate() - n); return 
 const daysAhead = n => { const d = new Date(); d.setDate(d.getDate() + n); return toISO(d); };
 const todayISO = () => daysAgo(0);
 const monthKey = iso => String(iso).slice(0, 7);
+
+const daysInMonth = (y, m) => new Date(y, m, 0).getDate();
+const clampDay = day => Math.max(1, Math.min(31, num(day) || 1));
+/** First occurrence of `day` of the month on/after today. */
+const firstDueForDay = day => {
+  const d = new Date();
+  let y = d.getFullYear(), m = d.getMonth();
+  const dayN = clampDay(day);
+  let dd = Math.min(dayN, daysInMonth(y, m + 1));
+  if (dd < d.getDate()) {
+    m++; if (m > 11) { m = 0; y++; }
+    dd = Math.min(dayN, daysInMonth(y, m + 1));
+  }
+  return `${y}-${pad(m + 1)}-${pad(dd)}`;
+};
+/** Occurrence of `day` in the month after the current one (mark-done). */
+const nextMonthDay = day => {
+  const d = new Date();
+  let y = d.getFullYear(), m = d.getMonth() + 1;
+  if (m > 11) { m = 0; y++; }
+  const dd = Math.min(clampDay(day), daysInMonth(y, m + 1));
+  return `${y}-${pad(m + 1)}-${pad(dd)}`;
+};
 const clean = v => {
   if (v === null || v === undefined) return '';
   if (typeof v === 'number') return isFinite(v) ? v : '';
@@ -67,7 +90,7 @@ const settings = {
   'Room Pricing Note': 'Bei zinapungua au Kuongezeka kulingana na ukubwa wa chumba (prices may decrease or increase depending on room size)',
   'Live-in Working Hours': '5:00 a.m. - 6:30 p.m.',
   'Minimum Work Duration (months)': 3,
-  'Agency Fee Note': 'One-time agency fee paid by the employer upon contract initiation',
+  'Agency Fee Note': 'Househelp commission by term: 6 Months = 150,000 | 1 Year = 250,000 | Forever = 300,000 up to 500,000 (fixed). Employer contract termination fee = 500,000 (after payment Dee Cleaners is no longer responsible for the househelp).',
   'Payment Policy Note': 'All househelp service payments are made directly to Dee Cleaners, which handles salary disbursement',
   'Logo Reference': 'assets/dee_cleaners_logo/dee_cleaners_logo.png'
 };
@@ -87,7 +110,9 @@ const lists = {
     { name: 'Sitting Room & 3 Bedrooms', minprice: 250000, maxprice: 250000, category: 'Rooms With Furniture Cleaning', active: 'Yes', description: '' },
     { name: 'Sitting Room & 4 Bedrooms', minprice: 300000, maxprice: 300000, category: 'Rooms With Furniture Cleaning', active: 'Yes', description: '' },
     { name: 'Sitting Room & 5 Bedrooms', minprice: 350000, maxprice: 350000, category: 'Rooms With Furniture Cleaning', active: 'Yes', description: '' },
-    { name: 'Sitting Room & 6 Bedrooms', minprice: 450000, maxprice: 450000, category: 'Rooms With Furniture Cleaning', active: 'Yes', description: '' }
+    { name: 'Sitting Room & 6 Bedrooms', minprice: 450000, maxprice: 450000, category: 'Rooms With Furniture Cleaning', active: 'Yes', description: '' },
+    { name: 'Shop Cleaning', minprice: 50000, maxprice: 180000, category: 'Cleaning', active: 'Yes', description: 'Normal shop cleaning' },
+    { name: 'Deep Shop Cleaning', minprice: 200000, maxprice: 500000, category: 'Cleaning', active: 'Yes', description: 'Starts from 200,000 depending on shop size' }
   ] },
   sofaServices: { columns: ['Name', 'Min Price', 'Max Price', 'Active'], items: [] },
   laundryServices: { columns: ['Name', 'Unit', 'Light Price', 'Heavy Price', 'Ironing Price', 'Active', 'Description'], items: [] },
@@ -195,7 +220,8 @@ const db = {
   contracts: [],       // CON-
   complaints: [],      // CMP-
   replacements: [],    // REP-
-  attendance: []       // ATT-
+  attendance: [],      // ATT-
+  reminders: []        // REM- { id, customer, issue, dueDay, nextDue, lastSent, notes }
 };
 
 const idCounters = {};
@@ -415,19 +441,20 @@ function seed() {
 
   // ---- placements
   const P = (hh, emp, cat, desc, salary, freq, start, end, status, cstatus, livein,
-             hours, acc, meals, fee, notes) => ({
+             hours, acc, meals, fee, notes, term, termFee) => ({
     id: newId('PL'), househelpId: hh, employerId: emp, category: cat,
     jobDescription: desc, salary, paymentFrequency: freq, startDate: start,
     expectedEndDate: end || '', status, contractStatus: cstatus, liveIn: livein,
     workingHours: hours || '5:00 a.m. - 6:30 p.m.', accommodation: acc || '',
-    meals: meals || '', agencyFee: fee || 0, notes: notes || ''
+    meals: meals || '', agencyFee: fee || 0, notes: notes || '',
+    placementTerm: term || '', terminationFee: termFee || 0
   });
   db.placements.push(
-    P('HH-0001', 'CL-0001', 'Nuclear Family', 'Cleaning, cooking, child care', 200000, 'Monthly', daysAgo(90), '', 'Active', 'Active', 'Live-in', '', 'Private room provided', '3 meals a day', 50000, ''),
-    P('HH-0002', 'CL-0002', 'Single Parent Family', 'Cleaning and laundry', 100000, 'Monthly', daysAgo(75), '', 'Active', 'Active', 'Live-in', '', 'Shared quarters', 'Meals provided', 50000, ''),
-    P('HH-0006', 'CL-0003', 'Extended Family', 'Cleaning, child care', 300000, 'Monthly', daysAgo(14), '', 'Replacement Required', 'Terminated', 'Live-in', '', 'Private room', 'Meals provided', 75000, 'Househelp left without valid reason — replacement requested'),
-    P('HH-0003', 'CL-0004', 'Nuclear Family', 'Housekeeping, cooking', 180000, 'Monthly', daysAgo(7), daysAhead(83), 'Contract Pending', 'Pending', 'Live-out', '7:00 a.m. - 4:00 p.m.', 'Not applicable', 'Not applicable', 50000, 'Contract signing scheduled'),
-    P('HH-0004', '', 'Single Parent Family', 'Elderly care and cleaning', 90000, 'Weekly', '', '', 'Matching', 'Pending', 'Live-in', '', '', '', 0, 'Looking for a suitable employer')
+    P('HH-0001', 'CL-0001', 'Nuclear Family', 'Cleaning, cooking, child care', 200000, 'Monthly', daysAgo(90), '', 'Active', 'Active', 'Live-in', '', 'Private room provided', '3 meals a day', 150000, '', '6 Months'),
+    P('HH-0002', 'CL-0002', 'Single Parent Family', 'Cleaning and laundry', 100000, 'Monthly', daysAgo(75), '', 'Active', 'Active', 'Live-in', '', 'Shared quarters', 'Meals provided', 250000, '', '1 Year'),
+    P('HH-0006', 'CL-0003', 'Extended Family', 'Cleaning, child care', 300000, 'Monthly', daysAgo(14), '', 'Replacement Required', 'Terminated', 'Live-in', '', 'Private room', 'Meals provided', 300000, 'Househelp left without valid reason — replacement requested', 'Forever'),
+    P('HH-0003', 'CL-0004', 'Nuclear Family', 'Housekeeping, cooking', 180000, 'Monthly', daysAgo(7), daysAhead(83), 'Contract Pending', 'Pending', 'Live-out', '7:00 a.m. - 4:00 p.m.', 'Not applicable', 'Not applicable', 50000, 'Contract signing scheduled', '', 0),
+    P('HH-0004', '', 'Single Parent Family', 'Elderly care and cleaning', 90000, 'Weekly', '', '', 'Matching', 'Pending', 'Live-in', '', '', '', 0, 'Looking for a suitable employer', '', 0)
   );
 
   // ---- contracts
@@ -489,6 +516,17 @@ function seed() {
       checkIn: '08:00', checkOut: '17:00', hours: '9', status: 'Present', notes: '' },
     { id: newId('ATT'), date: daysAgo(0), personType: 'Househelp', person: 'Rose Mlay',
       checkIn: '05:00', checkOut: '18:30', hours: '13.5', status: 'Present', notes: 'Live-in househelp' }
+  );
+
+  // ---- monthly reminders
+  const todayDay = new Date().getDate();
+  db.reminders.push(
+    { id: newId('REM'), customer: 'Dr. Amina Rajabu', issue: 'Confirm househelp salary payment',
+      dueDay: todayDay, nextDue: todayISO(), lastSent: '', notes: 'Salary due by the 5th' },
+    { id: newId('REM'), customer: 'Neema Charles', issue: 'Follow up on outstanding order balance',
+      dueDay: clampDay(todayDay - 2), nextDue: daysAgo(2), lastSent: '', notes: '' },
+    { id: newId('REM'), customer: 'Baraka Mushi', issue: 'Monthly sofa cleaning reminder',
+      dueDay: clampDay(todayDay + 5), nextDue: firstDueForDay(todayDay + 5), lastSent: '', notes: 'Customer requested monthly clean' }
   );
 
   // decorate all orders with computed fields
@@ -562,8 +600,20 @@ const placementView = p => {
   const emp = db.employers.find(e => e.id === p.employerId);
   return Object.assign({}, p, {
     househelpName: hh ? hh.fullName : '', employerName: emp ? emp.fullName : '',
-    employerPhone: emp ? emp.phone : ''
+    employerPhone: emp ? emp.phone : '',
+    placementTerm: p.placementTerm || '', terminationFee: num(p.terminationFee)
   });
+};
+
+/** Househelp commission (agency fee) by placement term, in TZS. */
+const COMMISSION_FEES = { '6 Months': 150000, '1 Year': 250000, 'Forever': 300000 };
+const FOREVER_FEE_MIN = 300000, FOREVER_FEE_MAX = 500000, TERMINATION_FEE = 500000;
+const commissionForTerm = (term, given) => {
+  if (term === 'Forever') {
+    const n = num(given);
+    return n < FOREVER_FEE_MIN ? FOREVER_FEE_MIN : (n > FOREVER_FEE_MAX ? FOREVER_FEE_MAX : n);
+  }
+  return COMMISSION_FEES[term] || 0;
 };
 
 const groupCount = (items, keyFn) => {
@@ -628,6 +678,9 @@ function getDashboard() {
   const todayOrders = orders.filter(o => o.date === today);
   const monthOrders = orders.filter(o => monthKey(o.date) === month);
   const monthExp = expenses.filter(x => monthKey(x.date) === month);
+  const reminders = listSimple(db.reminders).map(r => Object.assign({}, r, { nextDue: String(r.nextDue || '') }));
+  const remindersDue = reminders.filter(r => r.nextDue && r.nextDue <= today)
+    .map(r => ({ id: r.id, customer: r.customer, issue: r.issue, nextDue: r.nextDue }));
   return {
     kpi: {
       todaySales: sum(todayOrders.map(o => o.total)),
@@ -648,7 +701,8 @@ function getDashboard() {
       contractsExpiringSoon: contracts.filter(c => c.status === 'Active' && c.endDate &&
         c.endDate >= today && c.endDate <= daysAhead(30)).length,
       openComplaints: complaints.filter(c => c.status !== 'Resolved' && c.status !== 'Escalated').length,
-      replacementRequests: replacements.filter(r => r.status === 'Requested' || r.status === 'In Progress').length
+      replacementRequests: replacements.filter(r => r.status === 'Requested' || r.status === 'In Progress').length,
+      dueReminders: remindersDue.length
     },
     charts: {
       revenueLast30Days: dailySeries(orders, 30, o => o.total),
@@ -664,6 +718,7 @@ function getDashboard() {
       complaintsByStatus: groupCount(complaints, c => c.status || 'Reported'),
       contractStatuses: groupCount(contracts, c => c.status || 'Pending')
     },
+    remindersDue,
     generatedAt: today
   };
 }
@@ -1030,6 +1085,8 @@ function handleAction(action, d) {
       return rows;
     }
     case 'createPlacement': {
+      const term = clean(d.placementTerm);
+      if (term && !COMMISSION_FEES[term]) throw new Error('Placement Term must be one of: 6 Months, 1 Year, Forever');
       const p = { id: newId('PL'), househelpId: clean(d.househelpId),
         employerId: clean(d.employerId), category: clean(d.category),
         jobDescription: clean(d.jobDescription), salary: Math.max(0, num(d.salary)),
@@ -1037,7 +1094,9 @@ function handleAction(action, d) {
         expectedEndDate: clean(d.expectedEndDate), status: clean(d.status) || 'Pending',
         contractStatus: clean(d.contractStatus) || 'Pending', liveIn: clean(d.liveIn),
         workingHours: clean(d.workingHours), accommodation: clean(d.accommodation),
-        meals: clean(d.meals), agencyFee: Math.max(0, num(d.agencyFee)), notes: clean(d.notes) };
+        meals: clean(d.meals),
+        agencyFee: term ? commissionForTerm(term, num(d.agencyFee)) : Math.max(0, num(d.agencyFee)),
+        notes: clean(d.notes), placementTerm: term, terminationFee: 0 };
       if (!p.househelpId || !p.employerId) throw new Error('Househelp and Employer are required');
       db.placements.push(p);
       const hh = db.househelps.find(h => h.id === p.househelpId);
@@ -1050,12 +1109,15 @@ function handleAction(action, d) {
       const id = clean(d.placementId);
       const p = db.placements.find(x => x.id === id);
       if (!p) throw new Error('Placement not found: ' + id);
+      const term = d.placementTerm !== undefined ? clean(d.placementTerm) : p.placementTerm;
+      if (term && !COMMISSION_FEES[term]) throw new Error('Placement Term must be one of: 6 Months, 1 Year, Forever');
       Object.keys(d).forEach(k => {
         if (k === 'placementId') return;
         if (k === 'startDate') p[k] = validDate(d[k]);
-        else if (k === 'salary' || k === 'agencyFee') p[k] = Math.max(0, num(d[k]));
+        else if (k === 'salary' || k === 'agencyFee' || k === 'terminationFee') p[k] = Math.max(0, num(d[k]));
         else p[k] = clean(d[k]);
       });
+      if (term) p.agencyFee = commissionForTerm(term, p.agencyFee);
       const hh = db.househelps.find(h => h.id === p.househelpId);
       if (hh) hh.status = p.status === 'Active' ? 'On Contract' :
         (p.status === 'Completed' || p.status === 'Terminated') ? 'Available' : 'Placed';
@@ -1066,7 +1128,10 @@ function handleAction(action, d) {
       const p = db.placements.find(x => x.id === id);
       if (!p) throw new Error('Placement not found: ' + id);
       p.status = 'Terminated'; p.contractStatus = 'Terminated';
-      const stamp = `Terminated ${validDate(d.date)}${d.reason ? ': ' + clean(d.reason) : ''}`;
+      const fee = d.terminationFee !== undefined ? Math.max(0, num(d.terminationFee)) : TERMINATION_FEE;
+      if (fee > 0) p.terminationFee = fee;
+      const stamp = `Terminated ${validDate(d.date)}${d.reason ? ': ' + clean(d.reason) : ''}` +
+        (fee > 0 ? ` (employer termination fee ${fee} TZS — Dee Cleaners is no longer responsible for this househelp)` : '');
       p.notes = (p.notes ? p.notes + ' | ' : '') + stamp;
       const hh = db.househelps.find(h => h.id === p.househelpId);
       if (hh) hh.status = 'Available';
@@ -1127,7 +1192,15 @@ function handleAction(action, d) {
       c.status = 'Terminated'; c.terminationDate = validDate(d.date);
       if (d.reason) c.terminationReason = clean(d.reason);
       const p = db.placements.find(x => x.id === c.placementId);
-      if (p) { p.status = 'Terminated'; p.contractStatus = 'Terminated'; }
+      if (p) {
+        p.status = 'Terminated'; p.contractStatus = 'Terminated';
+        const fee = d.terminationFee !== undefined ? Math.max(0, num(d.terminationFee)) : TERMINATION_FEE;
+        if (fee > 0) {
+          p.terminationFee = fee;
+          p.notes = (p.notes ? p.notes + ' | ' : '') +
+            `Employer termination fee ${fee} TZS — Dee Cleaners is no longer responsible for this househelp`;
+        }
+      }
       return c;
     }
 
@@ -1254,6 +1327,49 @@ function handleAction(action, d) {
         else a[k] = clean(d[k]);
       });
       return a;
+    }
+
+    case 'listReminders': {
+      const s = String(d.search || '').toLowerCase();
+      const rows = db.reminders.slice().sort((a, b) => a.nextDue.localeCompare(b.nextDue) || a.customer.localeCompare(b.customer));
+      return s ? rows.filter(r => `${r.id} ${r.customer} ${r.issue} ${r.notes}`.toLowerCase().includes(s)) : rows;
+    }
+    case 'createReminder': {
+      const r = { id: newId('REM'), customer: clean(d.customer), issue: clean(d.issue),
+        dueDay: clampDay(d.dueDay), nextDue: firstDueForDay(d.dueDay), lastSent: '', notes: clean(d.notes) };
+      if (!r.customer) throw new Error('Customer is required');
+      if (!r.issue) throw new Error('Issue / reminder note is required');
+      db.reminders.push(r);
+      return r;
+    }
+    case 'updateReminder': {
+      const id = clean(d.reminderId);
+      const r = db.reminders.find(x => x.id === id);
+      if (!r) throw new Error('Reminder not found: ' + id);
+      const dueDay = d.dueDay !== undefined ? clampDay(d.dueDay) : r.dueDay;
+      Object.keys(d).forEach(k => {
+        if (k === 'reminderId' || k === 'dueDay') return;
+        r[k] = clean(d[k]);
+      });
+      r.dueDay = dueDay;
+      if (d.dueDay !== undefined) r.nextDue = firstDueForDay(dueDay);
+      if (!r.customer) throw new Error('Customer is required');
+      return r;
+    }
+    case 'completeReminder': {
+      const id = clean(d.reminderId);
+      const r = db.reminders.find(x => x.id === id);
+      if (!r) throw new Error('Reminder not found: ' + id);
+      r.lastSent = d.date ? String(d.date).slice(0, 10) : todayISO();
+      r.nextDue = nextMonthDay(r.dueDay);
+      return r;
+    }
+    case 'deleteReminder': {
+      const id = clean(d.reminderId);
+      const idx = db.reminders.findIndex(x => x.id === id);
+      if (idx < 0) throw new Error('Reminder not found: ' + id);
+      db.reminders.splice(idx, 1);
+      return { deleted: id };
     }
 
     case 'getDashboard': return getDashboard();

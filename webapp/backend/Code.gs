@@ -56,6 +56,7 @@ var SHEETS = {
   COMPLAINTS: 'Complaints',
   REPLACEMENTS: 'Replacements',
   ATTENDANCE: 'Attendance',
+  REMINDERS: 'Reminders',
   DASHBOARD: 'Dashboard',
   ARCHIVE: 'Archive'
 };
@@ -96,7 +97,26 @@ var EMPLOYERS_COLS = { id: 1, fullName: 2, familyMember: 3, phone: 4, email: 5,
 var PLACEMENTS_COLS = { id: 1, househelpId: 2, employerId: 3, category: 4,
   jobDescription: 5, salary: 6, paymentFrequency: 7, startDate: 8,
   expectedEndDate: 9, status: 10, contractStatus: 11, liveIn: 12,
-  workingHours: 13, accommodation: 14, meals: 15, agencyFee: 16, notes: 17 };
+  workingHours: 13, accommodation: 14, meals: 15, agencyFee: 16, notes: 17,
+  placementTerm: 18, terminationFee: 19 };
+
+/** Househelp commission (agency fee) by placement term, in TZS. */
+var COMMISSION_FEES = { '6 Months': 150000, '1 Year': 250000, 'Forever': 300000 };
+var FOREVER_FEE_MIN = 300000;
+var FOREVER_FEE_MAX = 500000;
+var TERMINATION_FEE = 500000;
+
+/** Agency fee for a placement term. 6 Months = 150,000; 1 Year = 250,000;
+ *  Forever = a fixed agreed amount clamped to 300,000 – 500,000. */
+function commissionForTerm(term, given) {
+  if (term === 'Forever') {
+    var n = num(given);
+    if (n < FOREVER_FEE_MIN) n = FOREVER_FEE_MIN;
+    if (n > FOREVER_FEE_MAX) n = FOREVER_FEE_MAX;
+    return n;
+  }
+  return COMMISSION_FEES[term] || 0;
+}
 var HH_PAYMENTS_COLS = { id: 1, househelpId: 2, employerId: 3, placementId: 4,
   paymentDate: 5, period: 6, amount: 7, method: 8, status: 9, reference: 10,
   notes: 11 };
@@ -112,6 +132,8 @@ var REPLACEMENTS_COLS = { id: 1, originalPlacement: 2, originalHousehelp: 3,
   replacementDate: 8, status: 9, notes: 10 };
 var ATTENDANCE_COLS = { id: 1, date: 2, personType: 3, person: 4, checkIn: 5,
   checkOut: 6, hours: 7, status: 8, notes: 9 };
+var REMINDERS_COLS = { id: 1, customer: 2, issue: 3, dueDay: 4, nextDue: 5,
+  lastSent: 6, notes: 7 };
 
 /** Header definitions used by the idempotent setup/migration. */
 var HEADER_DEFS = {
@@ -133,7 +155,8 @@ var HEADER_DEFS = {
   'Placements': ['Placement ID', 'Househelp ID', 'Employer ID', 'Category',
     'Job Description', 'Salary', 'Payment Frequency', 'Start Date',
     'Expected End Date', 'Status', 'Contract Status', 'Live-in/Live-out',
-    'Working Hours', 'Accommodation', 'Meals', 'Agency Fee', 'Notes'],
+    'Working Hours', 'Accommodation', 'Meals', 'Agency Fee', 'Notes',
+    'Placement Term', 'Termination Fee'],
   'Househelp Payments': ['Payment ID', 'Househelp ID', 'Employer ID',
     'Placement ID', 'Payment Date', 'Period', 'Amount', 'Payment Method',
     'Status', 'Reference', 'Notes'],
@@ -150,6 +173,8 @@ var HEADER_DEFS = {
     'Replacement Date', 'Status', 'Notes'],
   'Attendance': ['Attendance ID', 'Date', 'Person Type', 'Person', 'Check In',
     'Check Out', 'Hours', 'Status', 'Notes'],
+  'Reminders': ['Reminder ID', 'Customer', 'Issue / Reminder Note',
+    'Day of Month', 'Next Due Date', 'Last Sent', 'Notes'],
   'Dashboard': ['KPI', 'Value'],
   'Archive': ORDERS_HEADERS.concat(['Archived Date'])
 };
@@ -168,7 +193,7 @@ var DEFAULT_SETTINGS = [
   ['Room Pricing Note', 'Bei zinapungua au Kuongezeka kulingana na ukubwa wa chumba (prices may decrease or increase depending on room size)'],
   ['Live-in Working Hours', '5:00 a.m. - 6:30 p.m.'],
   ['Minimum Work Duration (months)', 3],
-  ['Agency Fee Note', 'One-time agency fee paid by the employer upon contract initiation'],
+  ['Agency Fee Note', 'Househelp commission by term: 6 Months = 150,000 | 1 Year = 250,000 | Forever = 300,000 up to 500,000 (fixed). Employer contract termination fee = 500,000 (after payment Dee Cleaners is no longer responsible for the househelp).'],
   ['Payment Policy Note', 'All househelp service payments are made directly to Dee Cleaners, which handles salary disbursement'],
   ['Logo Reference', 'assets/dee_cleaners_logo/dee_cleaners_logo.png']
 ];
@@ -189,7 +214,9 @@ var LIST_DEFS = [
       ['Sitting Room & 3 Bedrooms', 250000, 250000, 'Rooms With Furniture Cleaning', 'Yes', ''],
       ['Sitting Room & 4 Bedrooms', 300000, 300000, 'Rooms With Furniture Cleaning', 'Yes', ''],
       ['Sitting Room & 5 Bedrooms', 350000, 350000, 'Rooms With Furniture Cleaning', 'Yes', ''],
-      ['Sitting Room & 6 Bedrooms', 450000, 450000, 'Rooms With Furniture Cleaning', 'Yes', '']] },
+      ['Sitting Room & 6 Bedrooms', 450000, 450000, 'Rooms With Furniture Cleaning', 'Yes', ''],
+      ['Shop Cleaning', 50000, 180000, 'Cleaning', 'Yes', 'Normal shop cleaning'],
+      ['Deep Shop Cleaning', 200000, 500000, 'Cleaning', 'Yes', 'Starts from 200,000 depending on shop size']] },
   { title: 'SOFA SERVICES', columns: ['Name', 'Min Price', 'Max Price', 'Active'],
     rows: [['One Seater Sofa Set', 15000, 15000, 'Yes'],
       ['Two Seater Sofa Set', 30000, 30000, 'Yes'],
@@ -393,6 +420,12 @@ function handleAction(action, d) {
     case 'listAttendance': return listAttendance(d);
     case 'createAttendance': return createAttendance(d);
     case 'updateAttendance': return updateAttendance(d);
+    // reminders
+    case 'listReminders': return listReminders(d);
+    case 'createReminder': return createReminder(d);
+    case 'updateReminder': return updateReminder(d);
+    case 'completeReminder': return completeReminder(d);
+    case 'deleteReminder': return deleteReminder(d);
     // dashboard & reports
     case 'getDashboard': return getDashboard(d);
     case 'getReport': return getReport(d);
@@ -438,6 +471,8 @@ function ensureSetup() {
         settings.getRange(row + 1, 1, def.rows.length, def.columns.length)
           .setValues(def.rows);
       }
+    } else {
+      ensureListSectionRows(settings, existing[def.title], def);
     }
   }
 
@@ -461,6 +496,31 @@ function ensureSetup() {
     ensureOrdersFormulas(orders);
   }
   return ss;
+}
+
+/** Append any default rows missing from an existing list section
+ *  (matches on the Name column; additive, never touches existing rows). */
+function ensureListSectionRows(settings, titleRow, def) {
+  var last = settings.getLastRow();
+  var col1 = settings.getRange(1, 1, Math.max(last, titleRow + 1), 1).getValues();
+  var names = {};
+  var endRow = titleRow + 1; // last data row of this section (1-based, at least the header)
+  for (var r = titleRow + 1; r < col1.length; r++) { // 0-based index
+    var v = String(col1[r][0] || '');
+    if (!v) break;                 // blank row ends the section
+    if (LIST_NAMES[v]) break;      // next section title reached
+    names[v.toLowerCase()] = true;
+    endRow = r + 1;
+  }
+  var missing = def.rows.filter(function (row) {
+    return !names[String(row[0]).toLowerCase()];
+  });
+  if (!missing.length) return;
+  for (var m = 0; m < missing.length; m++) {
+    settings.insertRowAfter(endRow);
+    settings.getRange(endRow + 1, 1, 1, def.columns.length).setValues([missing[m]]);
+    endRow++;
+  }
 }
 
 function ensureHeaders(sh, headers) {
@@ -535,6 +595,17 @@ function num(v) { var n = Number(v); return isFinite(n) ? n : 0; }
 function validDate(v) {
   var s = clean(v);
   return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : todayISO();
+}
+
+/** Normalise a raw sheet date cell to 'yyyy-mm-dd' (Sheets returns Date
+ *  objects for date-formatted cells, which broke e.g. o.date.slice(...)). */
+function strDate(v) {
+  if (v instanceof Date) {
+    return v.getFullYear() + '-' + pad(v.getMonth() + 1, 2) + '-' + pad(v.getDate(), 2);
+  }
+  var s = String(v || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  return s;
 }
 
 function readRows(sheetName, nCols) {
@@ -788,6 +859,7 @@ function updateListItem(listName, name, item) {
 /** Map one raw Orders row to an API object with computed totals. */
 function orderFromRow(row) {
   var o = rowToObj(row, ORDERS_COLS);
+  o.date = strDate(o.date);
   var lineItems = [];
   if (o.lineItems) {
     try {
@@ -1157,6 +1229,7 @@ function getCustomerOrders(d) {
 
 function paymentFromRow(row) {
   var p = rowToObj(row, PAYMENTS_COLS);
+  p.date = strDate(p.date);
   p.amount = num(p.amount);
   return p;
 }
@@ -1261,6 +1334,7 @@ function deletePayment(d) {
 
 function expenseFromRow(row) {
   var x = rowToObj(row, EXPENSES_COLS);
+  x.date = strDate(x.date);
   x.amount = num(x.amount);
   return x;
 }
@@ -1345,7 +1419,9 @@ function deleteExpense(d) {
  * ========================================================================== */
 
 function househelpFromRow(row) {
-  return rowToObj(row, HOUSEHELPS_COLS);
+  var h = rowToObj(row, HOUSEHELPS_COLS);
+  h.registrationDate = strDate(h.registrationDate);
+  return h;
 }
 
 function listHousehelps(d) {
@@ -1440,7 +1516,11 @@ function archiveHousehelp(d) {
  * Employers / Clients
  * ========================================================================== */
 
-function employerFromRow(row) { return rowToObj(row, EMPLOYERS_COLS); }
+function employerFromRow(row) {
+  var e = rowToObj(row, EMPLOYERS_COLS);
+  e.registrationDate = strDate(e.registrationDate);
+  return e;
+}
 
 function listEmployers(d) {
   var rows = readRows(SHEETS.EMPLOYERS, 13);
@@ -1521,6 +1601,9 @@ function placementFromRow(row) {
   var p = rowToObj(row, PLACEMENTS_COLS);
   p.salary = num(p.salary);
   p.agencyFee = num(p.agencyFee);
+  p.terminationFee = num(p.terminationFee);
+  p.startDate = strDate(p.startDate);
+  p.expectedEndDate = strDate(p.expectedEndDate);
   return p;
 }
 
@@ -1542,7 +1625,7 @@ function lookupName(sheetName, id, col) {
 }
 
 function listPlacements(d) {
-  var rows = readRows(SHEETS.PLACEMENTS, 17);
+  var rows = readRows(SHEETS.PLACEMENTS, 19);
   var out = [];
   for (var i = 0; i < rows.length; i++) {
     if (!String(rows[i][0] || '').trim()) continue;
@@ -1559,6 +1642,8 @@ function listPlacements(d) {
 }
 
 function createPlacement(d) {
+  var term = clean(d.placementTerm);
+  if (term && !COMMISSION_FEES[term]) throw new Error('Placement Term must be one of: 6 Months, 1 Year, Forever');
   var p = {
     id: newId('PL', SHEETS.PLACEMENTS, 1),
     househelpId: clean(d.househelpId),
@@ -1575,17 +1660,19 @@ function createPlacement(d) {
     workingHours: clean(d.workingHours),
     accommodation: clean(d.accommodation),
     meals: clean(d.meals),
-    agencyFee: Math.max(0, num(d.agencyFee)),
-    notes: clean(d.notes)
+    agencyFee: term ? commissionForTerm(term, num(d.agencyFee)) : Math.max(0, num(d.agencyFee)),
+    notes: clean(d.notes),
+    placementTerm: term,
+    terminationFee: 0
   };
   if (!p.househelpId || !p.employerId) throw new Error('Househelp and Employer are required');
   var sheet = sh(SHEETS.PLACEMENTS);
   var last = Math.max(sheet.getLastRow(), DATA_START_ROW - 1);
   var dest = last + 1;
-  sheet.getRange(dest, 1, 1, 17).setValues([[p.id, p.househelpId, p.employerId,
+  sheet.getRange(dest, 1, 1, 19).setValues([[p.id, p.househelpId, p.employerId,
     p.category, p.jobDescription, p.salary, p.paymentFrequency, p.startDate,
     p.expectedEndDate, p.status, p.contractStatus, p.liveIn, p.workingHours,
-    p.accommodation, p.meals, p.agencyFee, p.notes]]);
+    p.accommodation, p.meals, p.agencyFee, p.notes, p.placementTerm, p.terminationFee]]);
   // househelp now placed (match updatePlacement's status mapping)
   var hhRow = findRowByValue(SHEETS.HOUSEHELPS, 1, p.househelpId);
   if (hhRow >= 0) {
@@ -1602,7 +1689,9 @@ function updatePlacement(d) {
   if (!id) throw new Error('placementId is required');
   var rowIdx = findRowByValue(SHEETS.PLACEMENTS, 1, id);
   if (rowIdx < 0) throw new Error('Placement not found: ' + id);
-  var old = placementFromRow(sh(SHEETS.PLACEMENTS).getRange(rowIdx, 1, 1, 17).getValues()[0]);
+  var old = placementFromRow(sh(SHEETS.PLACEMENTS).getRange(rowIdx, 1, 1, 19).getValues()[0]);
+  var term = d.placementTerm !== undefined ? clean(d.placementTerm) : old.placementTerm;
+  if (term && !COMMISSION_FEES[term]) throw new Error('Placement Term must be one of: 6 Months, 1 Year, Forever');
   var p = {
     id: id,
     househelpId: d.househelpId !== undefined ? clean(d.househelpId) : old.househelpId,
@@ -1619,13 +1708,17 @@ function updatePlacement(d) {
     workingHours: d.workingHours !== undefined ? clean(d.workingHours) : old.workingHours,
     accommodation: d.accommodation !== undefined ? clean(d.accommodation) : old.accommodation,
     meals: d.meals !== undefined ? clean(d.meals) : old.meals,
-    agencyFee: d.agencyFee !== undefined ? Math.max(0, num(d.agencyFee)) : old.agencyFee,
-    notes: d.notes !== undefined ? clean(d.notes) : old.notes
+    agencyFee: term ? commissionForTerm(term, num(d.agencyFee !== undefined ? d.agencyFee : old.agencyFee))
+      : (d.agencyFee !== undefined ? Math.max(0, num(d.agencyFee)) : old.agencyFee),
+    notes: d.notes !== undefined ? clean(d.notes) : old.notes,
+    placementTerm: term,
+    terminationFee: d.terminationFee !== undefined ? Math.max(0, num(d.terminationFee)) : old.terminationFee
   };
-  sh(SHEETS.PLACEMENTS).getRange(rowIdx, 1, 1, 17).setValues([[p.id, p.househelpId,
+  sh(SHEETS.PLACEMENTS).getRange(rowIdx, 1, 1, 19).setValues([[p.id, p.househelpId,
     p.employerId, p.category, p.jobDescription, p.salary, p.paymentFrequency,
     p.startDate, p.expectedEndDate, p.status, p.contractStatus, p.liveIn,
-    p.workingHours, p.accommodation, p.meals, p.agencyFee, p.notes]]);
+    p.workingHours, p.accommodation, p.meals, p.agencyFee, p.notes,
+    p.placementTerm, p.terminationFee]]);
   var hhRow = findRowByValue(SHEETS.HOUSEHELPS, 1, p.househelpId);
   if (hhRow >= 0) {
     var st = p.status === 'Active' ? 'On Contract' :
@@ -1644,8 +1737,11 @@ function terminatePlacement(d) {
   var reason = clean(d.reason);
   sh(SHEETS.PLACEMENTS).getRange(rowIdx, 10).setValue('Terminated');
   sh(SHEETS.PLACEMENTS).getRange(rowIdx, 11).setValue('Terminated');
+  var fee = d.terminationFee !== undefined ? Math.max(0, num(d.terminationFee)) : TERMINATION_FEE;
+  if (fee > 0) sh(SHEETS.PLACEMENTS).getRange(rowIdx, 19).setValue(fee);
   var oldNotes = String(sh(SHEETS.PLACEMENTS).getRange(rowIdx, 17).getValue() || '');
-  var stamp = 'Terminated ' + validDate(d.date) + (reason ? ': ' + reason : '');
+  var stamp = 'Terminated ' + validDate(d.date) + (reason ? ': ' + reason : '') +
+    (fee > 0 ? ' (employer termination fee ' + fee + ' TZS — Dee Cleaners is no longer responsible for this househelp)' : '');
   sh(SHEETS.PLACEMENTS).getRange(rowIdx, 17).setValue((oldNotes ? oldNotes + ' | ' : '') + stamp);
   var hhId = String(sh(SHEETS.PLACEMENTS).getRange(rowIdx, 2).getValue() || '');
   var hhRow = findRowByValue(SHEETS.HOUSEHELPS, 1, hhId);
@@ -1667,7 +1763,13 @@ function terminatePlacement(d) {
  * Contracts
  * ========================================================================== */
 
-function contractFromRow(row) { return rowToObj(row, CONTRACTS_COLS); }
+function contractFromRow(row) {
+  var c = rowToObj(row, CONTRACTS_COLS);
+  c.startDate = strDate(c.startDate);
+  c.endDate = strDate(c.endDate);
+  c.terminationDate = strDate(c.terminationDate);
+  return c;
+}
 
 function listContracts(d) {
   var rows = readRows(SHEETS.CONTRACTS, 16);
@@ -1778,6 +1880,14 @@ function terminateContract(d) {
     if (pRow >= 0) {
       sh(SHEETS.PLACEMENTS).getRange(pRow, 10).setValue('Terminated');
       sh(SHEETS.PLACEMENTS).getRange(pRow, 11).setValue('Terminated');
+      var fee = d.terminationFee !== undefined ? Math.max(0, num(d.terminationFee)) : TERMINATION_FEE;
+      if (fee > 0) {
+        sh(SHEETS.PLACEMENTS).getRange(pRow, 19).setValue(fee);
+        var pNotes = String(sh(SHEETS.PLACEMENTS).getRange(pRow, 17).getValue() || '');
+        sh(SHEETS.PLACEMENTS).getRange(pRow, 17).setValue(
+          (pNotes ? pNotes + ' | ' : '') + 'Employer termination fee ' + fee +
+          ' TZS — Dee Cleaners is no longer responsible for this househelp');
+      }
     }
   }
   return listContracts({}).filter(function (c) { return c.id === id; })[0] ||
@@ -1790,6 +1900,7 @@ function terminateContract(d) {
 
 function hhPaymentFromRow(row) {
   var p = rowToObj(row, HH_PAYMENTS_COLS);
+  p.paymentDate = strDate(p.paymentDate);
   p.amount = num(p.amount);
   return p;
 }
@@ -1865,7 +1976,12 @@ function updateHousehelpPayment(d) {
  * Complaints
  * ========================================================================== */
 
-function complaintFromRow(row) { return rowToObj(row, COMPLAINTS_COLS); }
+function complaintFromRow(row) {
+  var c = rowToObj(row, COMPLAINTS_COLS);
+  c.date = strDate(c.date);
+  c.resolutionDate = strDate(c.resolutionDate);
+  return c;
+}
 
 function listComplaints(d) {
   var rows = readRows(SHEETS.COMPLAINTS, 14);
@@ -1958,7 +2074,12 @@ function resolveComplaint(d) {
  * Replacements
  * ========================================================================== */
 
-function replacementFromRow(row) { return rowToObj(row, REPLACEMENTS_COLS); }
+function replacementFromRow(row) {
+  var r = rowToObj(row, REPLACEMENTS_COLS);
+  r.requestDate = strDate(r.requestDate);
+  r.replacementDate = strDate(r.replacementDate);
+  return r;
+}
 
 function listReplacements(d) {
   var rows = readRows(SHEETS.REPLACEMENTS, 10);
@@ -2034,7 +2155,11 @@ function updateReplacement(d) {
  * Attendance
  * ========================================================================== */
 
-function attendanceFromRow(row) { return rowToObj(row, ATTENDANCE_COLS); }
+function attendanceFromRow(row) {
+  var a = rowToObj(row, ATTENDANCE_COLS);
+  a.date = strDate(a.date);
+  return a;
+}
 
 function listAttendance(d) {
   var rows = readRows(SHEETS.ATTENDANCE, 9);
@@ -2095,6 +2220,137 @@ function updateAttendance(d) {
 }
 
 /* ==========================================================================
+ * Monthly reminders (recurring, per customer, on a fixed day of the month)
+ * ========================================================================== */
+
+function daysInMonth(y, m) { return new Date(y, m, 0).getDate(); }
+
+/** First occurrence of `day` of the month on/after today. */
+function firstDueForDay(day) {
+  var d = new Date();
+  var y = d.getFullYear(), m = d.getMonth();
+  var dayN = Math.max(1, Math.min(31, num(day)));
+  var maxDay = daysInMonth(y, m + 1);
+  var dd = Math.min(dayN, maxDay);
+  if (dd < d.getDate()) {
+    m++;
+    if (m > 11) { m = 0; y++; }
+    maxDay = daysInMonth(y, m + 1);
+    dd = Math.min(dayN, maxDay);
+  }
+  return y + '-' + pad(m + 1, 2) + '-' + pad(dd, 2);
+}
+
+/** Occurrence of `day` in the month after the current one (used when a
+ *  reminder is marked done — always advances one full month). */
+function nextMonthDay(day) {
+  var d = new Date();
+  var y = d.getFullYear(), m = d.getMonth() + 1;
+  if (m > 11) { m = 0; y++; }
+  var dayN = Math.max(1, Math.min(31, num(day)));
+  var dd = Math.min(dayN, daysInMonth(y, m + 1));
+  return y + '-' + pad(m + 1, 2) + '-' + pad(dd, 2);
+}
+
+function reminderFromRow(row) {
+  var r = rowToObj(row, REMINDERS_COLS);
+  r.dueDay = num(r.dueDay) || 1;
+  r.nextDue = strDate(r.nextDue);
+  r.lastSent = strDate(r.lastSent);
+  return r;
+}
+
+function listReminders(d) {
+  var rows = readRows(SHEETS.REMINDERS, 7);
+  var out = [];
+  for (var i = 0; i < rows.length; i++) {
+    if (!String(rows[i][0] || '').trim()) continue;
+    var r = reminderFromRow(rows[i]);
+    r.row = DATA_START_ROW + i;
+    out.push(r);
+  }
+  out.sort(function (a, b) { return a.nextDue.localeCompare(b.nextDue) || a.customer.localeCompare(b.customer); });
+  var s = String((d && d.search) || '').toLowerCase();
+  if (s) out = out.filter(function (r) {
+    return (r.id + ' ' + r.customer + ' ' + r.issue + ' ' + r.notes).toLowerCase().indexOf(s) >= 0;
+  });
+  return out;
+}
+
+function createReminder(d) {
+  var r = {
+    id: newId('REM', SHEETS.REMINDERS, 1),
+    customer: clean(d.customer),
+    issue: clean(d.issue),
+    dueDay: Math.max(1, Math.min(31, num(d.dueDay) || 1)),
+    nextDue: firstDueForDay(d.dueDay),
+    lastSent: '',
+    notes: clean(d.notes)
+  };
+  if (!r.customer) throw new Error('Customer is required');
+  if (!r.issue) throw new Error('Issue / reminder note is required');
+  var sheet = sh(SHEETS.REMINDERS);
+  var last = Math.max(sheet.getLastRow(), DATA_START_ROW - 1);
+  var dest = last + 1;
+  sheet.getRange(dest, 1, 1, 7).setValues([[r.id, r.customer, r.issue, r.dueDay,
+    r.nextDue, r.lastSent, r.notes]]);
+  r.row = dest;
+  return r;
+}
+
+function updateReminder(d) {
+  var id = clean(d.reminderId);
+  if (!id) throw new Error('reminderId is required');
+  var rowIdx = findRowByValue(SHEETS.REMINDERS, 1, id);
+  if (rowIdx < 0) throw new Error('Reminder not found: ' + id);
+  var old = reminderFromRow(sh(SHEETS.REMINDERS).getRange(rowIdx, 1, 1, 7).getValues()[0]);
+  var dueDay = d.dueDay !== undefined ? Math.max(1, Math.min(31, num(d.dueDay) || 1)) : old.dueDay;
+  var r = {
+    id: id,
+    customer: d.customer !== undefined ? clean(d.customer) : old.customer,
+    issue: d.issue !== undefined ? clean(d.issue) : old.issue,
+    dueDay: dueDay,
+    nextDue: d.dueDay !== undefined ? firstDueForDay(dueDay) : strDate(old.nextDue),
+    lastSent: d.lastSent !== undefined ? strDate(d.lastSent) : old.lastSent,
+    notes: d.notes !== undefined ? clean(d.notes) : old.notes
+  };
+  if (!r.customer) throw new Error('Customer is required');
+  sh(SHEETS.REMINDERS).getRange(rowIdx, 1, 1, 7).setValues([[r.id, r.customer,
+    r.issue, r.dueDay, r.nextDue, r.lastSent, r.notes]]);
+  r.row = rowIdx;
+  return r;
+}
+
+/** Mark this month's reminder as sent/handled — advances to next month. */
+function completeReminder(d) {
+  var id = clean(d.reminderId);
+  if (!id) throw new Error('reminderId is required');
+  var rowIdx = findRowByValue(SHEETS.REMINDERS, 1, id);
+  if (rowIdx < 0) throw new Error('Reminder not found: ' + id);
+  var r = reminderFromRow(sh(SHEETS.REMINDERS).getRange(rowIdx, 1, 1, 7).getValues()[0]);
+  r.lastSent = d.date ? strDate(d.date) : todayISO();
+  r.nextDue = nextMonthDay(r.dueDay);
+  sh(SHEETS.REMINDERS).getRange(rowIdx, 1, 1, 7).setValues([[r.id, r.customer,
+    r.issue, r.dueDay, r.nextDue, r.lastSent, r.notes]]);
+  return r;
+}
+
+function deleteReminder(d) {
+  var id = clean(d.reminderId);
+  if (!id) throw new Error('reminderId is required');
+  var rowIdx = findRowByValue(SHEETS.REMINDERS, 1, id);
+  if (rowIdx < 0) throw new Error('Reminder not found: ' + id);
+  var sheet = sh(SHEETS.REMINDERS);
+  var last = sheet.getLastRow();
+  if (rowIdx < last) {
+    var below = sheet.getRange(rowIdx + 1, 1, last - rowIdx, 7).getValues();
+    sheet.getRange(rowIdx, 1, below.length, 7).setValues(below);
+  }
+  sheet.getRange(last, 1, 1, 7).clearContent();
+  return { deleted: id };
+}
+
+/* ==========================================================================
  * Dashboard
  * ========================================================================== */
 
@@ -2108,6 +2364,7 @@ function getDashboard(d) {
   var hhPayments = listHousehelpPayments({});
   var complaints = listComplaints({});
   var replacements = listReplacements({});
+  var reminders = listReminders({});
 
   var today = todayISO();
   var month = today.slice(0, 7);
@@ -2139,8 +2396,12 @@ function getDashboard(d) {
     }).length,
     replacementRequests: replacements.filter(function (r) {
       return r.status === 'Requested' || r.status === 'In Progress';
-    }).length
+    }).length,
+    dueReminders: reminders.filter(function (r) { return r.nextDue <= today; }).length
   };
+
+  var remindersDue = reminders.filter(function (r) { return r.nextDue <= today; })
+    .map(function (r) { return { id: r.id, customer: r.customer, issue: r.issue, nextDue: r.nextDue }; });
 
   var charts = {
     revenueLast30Days: dailySeries(orders, 30, function (o) { return o.total; }),
@@ -2157,7 +2418,7 @@ function getDashboard(d) {
     contractStatuses: groupCount(contracts, function (c) { return c.status || 'Pending'; })
   };
 
-  return { kpi: kpi, charts: charts, generatedAt: today };
+  return { kpi: kpi, charts: charts, remindersDue: remindersDue, generatedAt: today };
 }
 
 function sum(arr) { var s = 0; for (var i = 0; i < arr.length; i++) s += arr[i]; return s; }

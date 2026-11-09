@@ -118,6 +118,7 @@ can be changed later in **Settings ▸ API**.
 | `Househelp Payments` | Salary disbursements — kept separate from cleaning revenue |
 | `Complaints` / `Replacements` | Dispute handling and replacement requests |
 | `Attendance` | Staff / worker / househelp attendance |
+| `Reminders` | Recurring monthly reminders per customer (day of month, next due date, last sent) |
 | `Dashboard` | Live KPI formulas |
 | `Archive` | Deleted orders are archived here — never permanently removed |
 
@@ -152,6 +153,8 @@ Response is always HTTP 200 with `{ "ok": true, "data": … }` or
   `resolveComplaint`
 - Replacements: `listReplacements`, `createReplacement`, `updateReplacement`
 - Attendance: `listAttendance`, `createAttendance`, `updateAttendance`
+- Reminders: `listReminders`, `createReminder`, `updateReminder`,
+  `completeReminder` (mark done → advances one month), `deleteReminder`
 - Reports: `getDashboard`, `getReport` (`daily`, `weekly`, `monthly`,
   `yearly`, `pnl`, `outstanding`, `customers`, `services`, `laundry`,
   `househelps`, `placements`, `contracts`, `complaints`, `replacements`,
@@ -177,6 +180,11 @@ The same terms are also available in-app: **Contracts ▸ Print Agreement**.
 - Payments update the linked order's Amount Paid (capped at the order total).
 - Placements keep househelp statuses in sync (`Active → On Contract`,
   `Completed/Terminated → Available`, otherwise `Placed`).
+- Househelp commission (agency fee) follows the placement term:
+  6 Months = 150,000 TZS | 1 Year = 250,000 TZS | Forever = fixed
+  300,000–500,000 TZS. When the employer terminates a contract they pay a
+  500,000 TZS termination fee, after which Dee Cleaners is no longer
+  responsible for that househelp.
 - Househelp salary payments are kept on their own sheet — never merged into
   cleaning-service revenue.
 - All input is sanitized (control characters stripped, `=`/`+`/`@` neutralized

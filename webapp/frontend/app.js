@@ -284,6 +284,7 @@ const NAV = [
   { group: 'Operations', items: [
     { route: 'orders', label: 'Orders', icon: 'M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h10v2H4v-2zm14 2h2v-3h2v3h2v2h-2v3h-2v-3h-2v-2z' },
     { route: 'customers', label: 'Customers', icon: 'M16 11a4 4 0 10-4-4 4 4 0 004 4zm0 2c-2.67 0-8 1.34-8 4v3h16v-3c0-2.66-5.33-4-8-4zM7 11a3.5 3.5 0 100-7 3.5 3.5 0 000 7zm0 2c-2.33 0-7 1.17-7 3.5V19h7v-3c0-1.2.5-2.27 1.2-3.13A9.9 9.9 0 007 13z' },
+    { route: 'reminders', label: 'Reminders', icon: 'M12 22a2.1 2.1 0 002-2h-4a2.1 2.1 0 002 2zm6-6v-5a6 6 0 00-4-5.66V4a2 2 0 00-4 0v1.34A6 6 0 006 11v5l-2 2v1h16v-1z' },
     { route: 'payments', label: 'Payments', icon: 'M12 2a10 10 0 100 20 10 10 0 000-20zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z' },
     { route: 'expenses', label: 'Expenses', icon: 'M12 2a10 10 0 100 20 10 10 0 000-20zm-1 15H9v-6h2v6zm4 0h-2V7h2v10z' },
     { route: 'attendance', label: 'Attendance', icon: 'M12 2a10 10 0 1010 10A10 10 0 0012 2zm4.2 14.2L11 13V7h1.5v5.2l4.5 2.7z' },
@@ -310,6 +311,7 @@ const NAV = [
 
 const ROUTE_TITLES = {
   dashboard: 'Dashboard', orders: 'Orders', customers: 'Customers',
+  reminders: 'Monthly Reminders',
   payments: 'Payments', expenses: 'Expenses', attendance: 'Attendance',
   househelps: 'Househelp Service',
   employers: 'Employers / Clients', placements: 'Placements', contracts: 'Contracts',
@@ -574,6 +576,7 @@ VIEWS.dashboard = async () => {
       ${kpiCard('Active Househelps', k.activeHousehelps, '', '')}
       ${kpiCard('Active Placements', k.activePlacements, '', '')}
       ${kpiCard('Open Complaints', k.openComplaints, k.replacementRequests + ' replacement requests', 'warn')}
+      ${kpiCard('Reminders Due', k.dueReminders || 0, 'this month', (k.dueReminders || 0) ? 'danger' : '')}
     </div>
     <div class="grid-2">
       <div class="chart-box"><h4>Revenue — last 30 days</h4>${svgLine(c.revenueLast30Days, { money: true })}</div>
@@ -588,7 +591,20 @@ VIEWS.dashboard = async () => {
       <div class="chart-box"><h4>Complaints by status</h4>${svgDonut(c.complaintsByStatus, { centerLabel: 'Complaints' })}</div>
       <div class="chart-box"><h4>Contract status</h4>${svgDonut(c.contractStatuses, { centerLabel: 'Contracts' })}</div>
       <div class="chart-box"><h4>Revenue by service (top)</h4>${svgBars((c.revenueByService || []).slice(0, 7), { money: false })}</div>
-    </div>`;
+    </div>
+    ${(d.remindersDue && d.remindersDue.length) ? `
+    <div class="card" style="margin-top:14px">
+      <div class="card-head"><span class="card-title">🔔 Reminders due now</span>
+        <a href="#/reminders" style="font-size:12.5px">Manage reminders →</a></div>
+      <div class="table-wrap"><table class="data"><thead><tr>
+        <th>Customer</th><th>Issue</th><th>Due</th>
+      </tr></thead><tbody>
+      ${d.remindersDue.map(r => `<tr>
+        <td>${esc(r.customer)}</td><td>${esc(r.issue)}</td>
+        <td class="nowrap">${fmtDate(r.nextDue)} <span class="badge danger">Due</span></td>
+      </tr>`).join('')}
+      </tbody></table></div>
+    </div>` : ''}`;
   } catch (err) {
     main.innerHTML = errorHTML(err.message);
   }
@@ -1845,6 +1861,104 @@ function attendanceModal(record, ctx, onSaved) {
   });
 }
 
+/* ---------------------------------------------------------------- reminders */
+
+VIEWS.reminders = async () => {
+  const main = $('#main-content');
+  main.innerHTML = loadingHTML();
+  try {
+    const [reminders, customers] = await Promise.all([api('listReminders'), api('listCustomers')]);
+    const today = todayISO();
+    const dueCount = reminders.filter(r => r.nextDue <= today).length;
+    main.innerHTML = `
+    <div class="kpi-grid">
+      ${kpiCard('Due Now', dueCount, 'need attention', dueCount ? 'danger' : 'ok')}
+      ${kpiCard('Due This Month', reminders.filter(r => r.nextDue && String(r.nextDue).slice(0, 7) === today.slice(0, 7)).length, '', 'info')}
+      ${kpiCard('All Reminders', reminders.length, 'recurring monthly', '')}
+    </div>
+    <div class="card">
+      ${toolbarHTML({ searchPlaceholder: 'Search customer, issue…', actionLabel: 'New Reminder' })}
+      <div class="table-wrap" id="rem-table"></div>
+    </div>`;
+    const box = $('#rem-table');
+    const renderTable = rows => {
+      if (!rows.length) return box.innerHTML = emptyHTML('🔔', 'No reminders yet', 'Add monthly reminders — e.g. follow up a customer\'s payment or renew a service.');
+      box.innerHTML = `<table class="data"><thead><tr>
+        <th>Reminder</th><th>Customer</th><th>Issue</th><th class="num">Day</th><th>Next Due</th><th>Last Sent</th><th></th>
+      </tr></thead><tbody>
+      ${rows.map(r => {
+        const isDue = r.nextDue <= today;
+        return `<tr>
+        <td class="nowrap"><span class="row-main">${esc(r.id)}</span></td>
+        <td><span class="row-main">${esc(r.customer)}</span></td>
+        <td>${esc(r.issue)}${r.notes ? `<br><span class="row-sub">${esc(r.notes)}</span>` : ''}</td>
+        <td class="num">${r.dueDay}</td>
+        <td class="nowrap">${fmtDate(r.nextDue)}${isDue ? ' <span class="badge danger">Due</span>' : ''}</td>
+        <td class="nowrap">${r.lastSent ? fmtDate(r.lastSent) : '—'}</td>
+        <td><div class="table-actions">
+          <button class="icon-btn" title="Mark done for this month" data-done="${esc(r.id)}">✅</button>
+          <button class="icon-btn" title="Edit" data-edit="${esc(r.id)}">✏️</button>
+          <button class="icon-btn" title="Delete" data-del="${esc(r.id)}">🗑️</button>
+        </div></td>
+      </tr>`; }).join('')}
+      </tbody></table>`;
+      $$('[data-done]', box).forEach(b => b.addEventListener('click', async () => {
+        try {
+          await api('completeReminder', { reminderId: b.dataset.done });
+          toastOK('Reminder marked done — next due date advanced one month ✓'); VIEWS.reminders();
+        } catch (err) { toastErr(err.message); }
+      }));
+      $$('[data-edit]', box).forEach(b => b.addEventListener('click', () => reminderModal(b.dataset.edit, reminders, customers)));
+      $$('[data-del]', box).forEach(b => b.addEventListener('click', async () => {
+        if (await confirmDialog('Delete reminder?', `Reminder ${b.dataset.del} will be removed.`, { danger: true })) {
+          try { await api('deleteReminder', { reminderId: b.dataset.del }); toastOK('Reminder deleted'); VIEWS.reminders(); }
+          catch (err) { toastErr(err.message); }
+        }
+      }));
+    };
+    const apply = () => {
+      const q = val('tb-search').toLowerCase();
+      let rows = reminders;
+      if (q) rows = rows.filter(r => (r.id + ' ' + r.customer + ' ' + r.issue + ' ' + r.notes).toLowerCase().includes(q));
+      renderTable(rows);
+    };
+    apply();
+    $('#tb-search').addEventListener('input', debounce(apply, 250));
+    $('#tb-action').addEventListener('click', () => reminderModal(null, reminders, customers));
+  } catch (err) { main.innerHTML = errorHTML(err.message); }
+};
+
+function reminderModal(id, reminders, customers) {
+  const r = id ? reminders.find(x => x.id === id) : null;
+  const names = customers.map(c => c.name).sort();
+  const m = openModal(r ? 'Edit Reminder ' + r.id : 'New Monthly Reminder', `
+    <div class="form-grid">
+      <div class="field"><label>Customer <span class="req">*</span></label>
+        <input id="rem-customer" list="rem-cust-list" value="${esc((r && r.customer) || '')}" placeholder="Customer name">
+        <datalist id="rem-cust-list">${names.map(n => `<option value="${esc(n)}">`).join('')}</datalist></div>
+      <div class="field"><label>Remind on day of month <span class="req">*</span></label>${inputHTML('rem-day', (r && r.dueDay) || 1, 'number', '1', 'min="1" max="31"')}</div>
+      <div class="field full"><label>Issue / reminder note <span class="req">*</span></label>${textareaHTML('rem-issue', r && r.issue, 'e.g. Follow up on outstanding balance', 2)}</div>
+      <div class="field full"><label>Notes</label>${textareaHTML('rem-notes', r && r.notes, '')}</div>
+    </div>
+    <p class="hint" style="font-size:11.5px;color:var(--text-faint);margin-top:10px">Repeats every month on the chosen day. Mark it done each month to advance it to the next month.</p>
+    <div class="modal-foot" style="padding:14px 0 0">
+      <button class="btn btn-ghost" id="rem-cancel">Cancel</button>
+      <button class="btn btn-primary" id="rem-save">${r ? 'Save' : 'Add Reminder'}</button>
+    </div>`);
+  $('#rem-cancel').addEventListener('click', m.close);
+  $('#rem-save').addEventListener('click', async () => {
+    const customer = val('rem-customer'), issue = val('rem-issue');
+    if (!customer) { toastErr('Customer is required'); return; }
+    if (!issue) { toastErr('Issue / reminder note is required'); return; }
+    const payload = { customer, issue, dueDay: valNum('rem-day') || 1, notes: val('rem-notes') };
+    try {
+      if (r) await api('updateReminder', Object.assign({ reminderId: r.id }, payload));
+      else await api('createReminder', payload);
+      m.close(); toastOK('Reminder saved ✓'); VIEWS.reminders();
+    } catch (err) { toastErr(err.message); }
+  });
+}
+
 /* ---------------------------------------------------------------- placements */
 
 VIEWS.placements = async () => {
@@ -1896,7 +2010,7 @@ VIEWS.placements = async () => {
       if (!rows.length) return box.innerHTML = emptyHTML('🤝', 'No placements yet', 'Create a placement to connect a househelp with an employer.');
       box.innerHTML = `<table class="data"><thead><tr>
         <th>Placement</th><th>Househelp</th><th>Employer</th><th>Category</th>
-        <th class="num">Salary</th><th>Status</th><th>Contract</th><th></th>
+        <th class="num">Salary</th><th>Term / Fee</th><th>Status</th><th>Contract</th><th></th>
       </tr></thead><tbody>
       ${slice.map(p => `<tr>
         <td class="nowrap"><span class="row-main">${esc(p.id)}</span><br><span class="row-sub">${fmtDate(p.startDate)}${p.expectedEndDate ? ' – ' + fmtDate(p.expectedEndDate) : ''}</span></td>
@@ -1904,6 +2018,7 @@ VIEWS.placements = async () => {
         <td>${esc(p.employerName)}</td>
         <td>${esc(p.category)}</td>
         <td class="num">${fmtMoney(p.salary)}</td>
+        <td>${p.placementTerm ? `<span class="row-main">${esc(p.placementTerm)}</span><br><span class="row-sub">Fee ${fmtMoney(p.agencyFee)}${p.terminationFee ? ' · Term fee ' + fmtMoney(p.terminationFee) : ''}</span>` : '—'}</td>
         <td>${badge(p.status)}</td>
         <td>${badge(p.contractStatus)}</td>
         <td><div class="table-actions">
@@ -1915,10 +2030,10 @@ VIEWS.placements = async () => {
       bindPagination(box, rows.length, PAGE, p => { page = p; renderTable(rows); });
       $$('[data-edit]', box).forEach(b => b.addEventListener('click', () => placementModal(b.dataset.edit, placements, househelps, employers)));
       $$('[data-term]', box).forEach(b => b.addEventListener('click', async () => {
-        if (await confirmDialog('Terminate placement?', 'The placement and its linked contract will be marked Terminated.', { danger: true, confirmText: 'Terminate' })) {
+        if (await confirmDialog('Terminate placement?', 'The employer pays a 500,000 TZS termination fee. After payment, Dee Cleaners is no longer responsible for this househelp. The placement and its linked contract will be marked Terminated.', { danger: true, confirmText: 'Terminate' })) {
           try {
-            await api('terminatePlacement', { placementId: b.dataset.term, date: todayISO(), reason: 'Terminated from the app' });
-            toastOK('Placement terminated'); VIEWS.placements();
+            await api('terminatePlacement', { placementId: b.dataset.term, date: todayISO(), reason: 'Terminated from the app', terminationFee: 500000 });
+            toastOK('Placement terminated — 500,000 TZS termination fee recorded'); VIEWS.placements();
           } catch (err) { toastErr(err.message); }
         }
       }));
@@ -1960,7 +2075,11 @@ function placementModal(id, placements, househelps, employers) {
       <div class="field"><label>Salary (TZS)</label>${inputHTML('pl-salary', p && p.salary, 'number', '0', 'min="0"')}</div>
       <div class="field"><label>Payment Frequency</label>
         ${selectHTML('pl-freq', listNames('paymentFrequencies'), p && p.paymentFrequency, 'Monthly')}</div>
-      <div class="field"><label>Agency Fee (TZS, one-time)</label>${inputHTML('pl-fee', p && p.agencyFee, 'number', '0', 'min="0"')}</div>
+      <div class="field"><label>Placement Term</label>
+        ${selectHTML('pl-term', ['', '6 Months', '1 Year', 'Forever'], p && p.placementTerm)}
+        <span class="hint">Commission: 6 Months = 150,000 | 1 Year = 250,000 | Forever = fixed 300,000 – 500,000</span></div>
+      <div class="field"><label>Agency Fee (TZS, one-time)</label>${inputHTML('pl-fee', p && p.agencyFee, 'number', '0', 'min="0"')}
+        <span class="hint">Auto-filled from the term; adjust the Forever amount to the agreed fixed fee.</span></div>
       <div class="field"><label>Start Date</label>${inputHTML('pl-start', (p && p.startDate) || todayISO(), 'date')}</div>
       <div class="field"><label>Expected End Date</label>${inputHTML('pl-end', p && p.expectedEndDate, 'date')}</div>
       <div class="field"><label>Status</label>${selectHTML('pl-status', listNames('placementStatuses'), (p && p.status) || 'Pending')}</div>
@@ -1977,10 +2096,18 @@ function placementModal(id, placements, househelps, employers) {
       <button class="btn btn-ghost" id="pl-cancel">Cancel</button>
       <button class="btn btn-primary" id="pl-save">${p ? 'Save' : 'Create Placement'}</button>
     </div>`);
+    $('#pl-term').addEventListener('change', () => {
+      const fees = { '6 Months': 150000, '1 Year': 250000, 'Forever': 300000 };
+      if (fees[val('pl-term')]) document.getElementById('pl-fee').value = fees[val('pl-term')];
+    });
     $('#pl-cancel').addEventListener('click', m.close);
     $('#pl-save').addEventListener('click', async () => {
       const hh = val('pl-hh'), emp = val('pl-emp');
       if (!hh || !emp) { toastErr('Househelp and Employer are required'); return; }
+      const term = val('pl-term'), fee = valNum('pl-fee');
+      if (term === 'Forever' && (fee < 300000 || fee > 500000)) {
+        toastErr('Forever commission must be a fixed amount between 300,000 and 500,000 TZS'); return;
+      }
       const payload = {
         househelpId: hh, employerId: emp, category: val('pl-cat'),
         jobDescription: val('pl-desc'), salary: valNum('pl-salary'),
@@ -1988,7 +2115,7 @@ function placementModal(id, placements, househelps, employers) {
         expectedEndDate: val('pl-end'), status: val('pl-status') || 'Pending',
         contractStatus: val('pl-cstatus') || 'Pending', liveIn: val('pl-livein'),
         workingHours: val('pl-hours'), accommodation: val('pl-acc'),
-        meals: val('pl-meals'), agencyFee: valNum('pl-fee'), notes: val('pl-notes')
+        meals: val('pl-meals'), agencyFee: fee, placementTerm: term, notes: val('pl-notes')
       };
       try {
         if (p) await api('updatePlacement', Object.assign({ placementId: p.id }, payload));
@@ -2044,10 +2171,10 @@ VIEWS.contracts = async () => {
       $$('[data-print]', box).forEach(b => b.addEventListener('click', () => printContract(b.dataset.print, contracts, placements)));
       $$('[data-edit]', box).forEach(b => b.addEventListener('click', () => contractModal(b.dataset.edit, contracts, placements)));
       $$('[data-term]', box).forEach(b => b.addEventListener('click', async () => {
-        if (await confirmDialog('Terminate contract?', 'The contract and its placement will be marked Terminated.', { danger: true, confirmText: 'Terminate' })) {
+        if (await confirmDialog('Terminate contract?', 'The employer pays a 500,000 TZS termination fee. After payment, Dee Cleaners is no longer responsible for this househelp. The contract and its placement will be marked Terminated.', { danger: true, confirmText: 'Terminate' })) {
           try {
-            await api('terminateContract', { contractId: b.dataset.term, date: todayISO(), reason: 'Terminated from the app' });
-            toastOK('Contract terminated'); VIEWS.contracts();
+            await api('terminateContract', { contractId: b.dataset.term, date: todayISO(), reason: 'Terminated from the app', terminationFee: 500000 });
+            toastOK('Contract terminated — 500,000 TZS termination fee recorded'); VIEWS.contracts();
           } catch (err) { toastErr(err.message); }
         }
       }));
@@ -2103,6 +2230,8 @@ function contractModal(id, contracts, placements) {
       if (p) {
         document.getElementById('c-emp').value = p.employerName;
         document.getElementById('c-hh').value = p.househelpName;
+        const minDur = { '6 Months': '6 months', '1 Year': '1 year', 'Forever': 'Indefinite (Forever)' }[p.placementTerm];
+        if (minDur) document.getElementById('c-min').value = minDur;
       }
     });
     $('#c-cancel').addEventListener('click', m.close);
@@ -2138,7 +2267,7 @@ const AGREEMENT_TERMS = [
   { t: '3. Payment Terms', items: [
     'The employer agrees to pay the househelp on time, as stipulated in the signed agreement. The payment should be made monthly/weekly, by Cash, Mobile Payments or Bank deposits.',
     'Any salary deductions must be transparent and communicated in advance, e.g., for damages or non-performance.',
-    'Dee Cleaners is entitled to a one-time agency fee paid by the employer upon contract initiation.'] },
+    'Dee Cleaners is entitled to a one-time commission (agency fee) paid by the employer upon contract initiation: 6 Months = 150,000 TZS; 1 Year = 250,000 TZS; Forever = a fixed amount of 300,000 up to 500,000 TZS.'] },
   { t: '4. Accommodation and Meals (for live-in househelps)', items: [
     'If the househelp is live-in, the employer must provide adequate accommodation (clean and safe living quarters) and sufficient meals or an allowance for food.',
     'Any additional expenses related to the househelp’s living conditions should be clearly agreed upon and documented.'] },
@@ -2151,6 +2280,7 @@ const AGREEMENT_TERMS = [
     'In cases of abuse, harassment, unsafe working conditions, serious misconduct, or any situation that affects the househelp’s well-being, the househelp may terminate the agreement immediately and inform Dee Cleaners.',
     'In the event of immediate termination, Dee Cleaners must be notified within 24 hours.',
     'If the employer delays or fails to pay the househelp’s salary as agreed, Dee Cleaners reserves the right to terminate its services to the employer and may refuse to provide any replacement househelp or future placements.',
+    'If the employer (the second party) decides to terminate the contract, the employer pays a termination fee of 500,000 TZS. Once the termination fee is paid, Dee Cleaners is no longer responsible for that househelp.',
     'Dee Cleaners reserves the right to review each termination case individually and make a final decision based on the circumstances of the case.'] },
   { t: '7. Health and Safety', items: [
     'The employer must provide a safe and hygienic environment for the househelp to work in.',
@@ -2811,30 +2941,146 @@ VIEWS.receipts = async () => {
   try {
     const [settings, payments, orders] = await Promise.all([getSettings(), api('listPayments'), api('listOrders')]);
     const ordered = [...payments].sort((a, b) => b.date.localeCompare(a.date));
-    const requested = currentRouteParams().payment;
-    const initial = requested && payments.find(p => p.id === requested) ? requested : (ordered[0] ? ordered[0].id : '');
+    const orderOptions = orders.filter(o => payments.some(p => p.orderId === o.id))
+      .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+    const requested = currentRouteParams();
+    const initialPay = requested.payment && payments.find(p => p.id === requested.payment) ? requested.payment : (ordered[0] ? ordered[0].id : '');
+    const initialOrder = requested.order && orderOptions.find(o => o.id === requested.order) ? requested.order : (orderOptions[0] ? orderOptions[0].id : '');
+    let mode = requested.order ? 'order' : 'pay';
     main.innerHTML = `
     <div class="card no-print" style="margin-bottom:14px">
-      <div class="field"><label>Select payment for receipt</label>
+      <div class="pill-row" id="rcp-modes">
+        <button class="pill ${mode === 'pay' ? 'on' : ''}" data-mode="pay">Single payment</button>
+        <button class="pill ${mode === 'order' ? 'on' : ''}" data-mode="order">Order — all transactions</button>
+      </div>
+      <div class="field" id="rcp-pay-wrap" style="${mode === 'pay' ? '' : 'display:none'}">
+        <label>Select payment for receipt</label>
         <select id="rcp-payment">
           <option value="">Select a payment…</option>
-          ${ordered.map(p => `<option value="${esc(p.id)}" ${p.id === initial ? 'selected' : ''}>${esc(p.id)} — ${esc(p.customer)} — ${fmtMoney(p.amount)} (${fmtDate(p.date)})</option>`).join('')}
-        </select></div>
+          ${ordered.map(p => `<option value="${esc(p.id)}" ${p.id === initialPay ? 'selected' : ''}>${esc(p.id)} — ${esc(p.customer)} — ${fmtMoney(p.amount)} (${fmtDate(p.date)})</option>`).join('')}
+        </select>
+        <p class="hint" style="font-size:11.5px;color:var(--text-faint)">Orders with several transactions can be printed as one combined receipt — switch to “Order — all transactions”.</p>
+      </div>
+      <div class="field" id="rcp-order-wrap" style="${mode === 'order' ? '' : 'display:none'}">
+        <label>Select order for receipt</label>
+        <select id="rcp-order">
+          <option value="">Select an order…</option>
+          ${orderOptions.map(o => {
+            const ps = payments.filter(p => p.orderId === o.id);
+            return `<option value="${esc(o.id)}" ${o.id === initialOrder ? 'selected' : ''}>${esc(o.id)} — ${esc(o.customerName || ps[0].customer)} — ${ps.length} transaction${ps.length > 1 ? 's' : ''} (${fmtDate(o.date)})</option>`;
+          }).join('')}
+        </select>
+      </div>
     </div>
     <div id="rcp-preview"></div>`;
+    const setMode = m => {
+      mode = m;
+      $$('#rcp-modes .pill').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
+      $('#rcp-pay-wrap').style.display = m === 'pay' ? '' : 'none';
+      $('#rcp-order-wrap').style.display = m === 'order' ? '' : 'none';
+      render();
+    };
     const render = () => {
+      const preview = $('#rcp-preview');
+      if (mode === 'order') {
+        const id = val('rcp-order');
+        const o = orders.find(x => x.id === id);
+        const ps = payments.filter(p => p.orderId === id).sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+        if (!o || !ps.length) { preview.innerHTML = emptyHTML('🧾', 'Select an order', 'Choose an order from the list to print all of its transactions on one receipt.'); return; }
+        preview.innerHTML = orderReceiptHTML(settings, o, ps, false);
+        $('#rcp-export').addEventListener('click', () => exportReceiptDoc(settings, o, ps, false));
+        $('#rcp-print').addEventListener('click', () => exportReceiptDoc(settings, o, ps, true));
+        return;
+      }
       const id = val('rcp-payment');
       const p = payments.find(x => x.id === id);
-      const preview = $('#rcp-preview');
       if (!p) { preview.innerHTML = emptyHTML('🧾', 'Select a payment', 'Choose a payment from the list to generate its receipt.'); return; }
-      preview.innerHTML = receiptHTML(settings, p, orders, false);
+      const otherTxs = payments.filter(x => x.orderId === p.orderId && x.id !== p.id).length;
+      preview.innerHTML = receiptHTML(settings, p, orders, false) +
+        (otherTxs ? `<div class="card no-print" style="margin-top:14px">
+          <p style="font-size:13px">This order has ${otherTxs + 1} transactions. Print them all together on one receipt.</p>
+          <button class="btn btn-outline" id="rcp-view-order">🧾 View full order receipt</button></div>` : '');
+      const vo = $('#rcp-view-order');
+      if (vo) vo.addEventListener('click', () => {
+        $('#rcp-order').value = p.orderId;
+        setMode('order');
+      });
       $('#rcp-export').addEventListener('click', () => exportReceipt(settings, p, orders));
       $('#rcp-print').addEventListener('click', () => exportReceipt(settings, p, orders, true));
     };
+    $$('#rcp-modes .pill').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
     $('#rcp-payment').addEventListener('change', render);
+    $('#rcp-order').addEventListener('change', render);
     render();
   } catch (err) { main.innerHTML = errorHTML(err.message); }
 };
+
+/** Receipt covering ALL payments of one order (combined transactions). */
+function orderReceiptHTML(settings, o, orderPayments, standalone) {
+  const s = settings.settings;
+  const totalPaid = orderPayments.reduce((t, p) => t + valNumSafe(p.amount), 0);
+  const remaining = Math.max(0, (o.total || 0) - totalPaid);
+  const customer = o.customerName || orderPayments[0].customer;
+  return `
+  <div class="doc-paper" id="receipt-doc">
+    <div class="doc-head">
+      <img src="icons/logo.png" alt="Dee Cleaners logo">
+      <div class="doc-company">
+        <h1>${esc(s['Business Name'] || 'Dee Cleaners')}</h1>
+        <div class="doc-tag">Official Payment Receipt</div>
+        <p>${esc(s['Phone 1'] || '')}${s['Phone 2'] ? ' / ' + esc(s['Phone 2']) : ''}<br>
+        ${esc(s.Email || '')}<br>${esc(s.Address || '')}</p>
+      </div>
+    </div>
+    <div class="doc-title">ORDER PAYMENT RECEIPT — ALL TRANSACTIONS</div>
+    <div class="doc-meta">
+      <div class="m-item"><span class="k">Order ID</span><span class="v">${esc(o.id)}</span></div>
+      <div class="m-item"><span class="k">Customer</span><span class="v">${esc(customer)}</span></div>
+      <div class="m-item"><span class="k">Service</span><span class="v">${esc(o.service || '—')}</span></div>
+      <div class="m-item"><span class="k">Order Total</span><span class="v">${fmtMoneyTZS(o.total || 0)}</span></div>
+      <div class="m-item"><span class="k">Transactions</span><span class="v">${orderPayments.length}</span></div>
+      <div class="m-item"><span class="k">Printed</span><span class="v">${fmtDate(todayISO())}</span></div>
+    </div>
+    <table class="doc-table">
+      <thead><tr>
+        <th>#</th><th>Payment ID</th><th>Date</th><th>Method</th><th>Reference</th><th>Received By</th><th class="num">Amount (TZS)</th>
+      </tr></thead>
+      <tbody>
+      ${orderPayments.map((p, i) => `<tr>
+        <td>${i + 1}</td><td>${esc(p.id)}</td><td class="nowrap">${fmtDate(p.date)}</td>
+        <td>${esc(p.method)}</td><td>${esc(p.reference || '—')}</td><td>${esc(p.receivedBy || 'Dee Cleaners')}</td>
+        <td class="num">${fmtMoneyTZS(p.amount)}</td>
+      </tr>`).join('')}
+      </tbody>
+    </table>
+    <div class="doc-summary">
+      <div class="s-row"><span>Order Total</span><span>${fmtMoneyTZS(o.total || 0)}</span></div>
+      <div class="s-row"><span>Total Paid</span><span>${fmtMoneyTZS(totalPaid)}</span></div>
+      <div class="s-row grand"><span>Remaining Balance</span><span>${fmtMoneyTZS(remaining)}</span></div>
+    </div>
+    <div class="doc-sig">
+      <div class="sig"><div class="line"></div><div class="cap">Received by (signature)</div></div>
+      <div class="sig"><div class="line"></div><div class="cap">Customer (signature)</div></div>
+    </div>
+    <div class="doc-footer">Thank you for choosing Dee Cleaners.</div>
+    ${standalone ? '' : `
+    <div class="doc-btns no-print" style="margin-top:16px">
+      <button class="btn btn-primary" id="rcp-export">⬇ Export PDF</button>
+      <button class="btn btn-outline" id="rcp-print">🖨 Print</button>
+    </div>`}
+  </div>`;
+}
+
+function exportReceiptDoc(settings, o, orderPayments, printNow) {
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Receipt ${esc(o.id)} — Dee Cleaners</title>
+    <link rel="stylesheet" href="styles.css"></head><body>
+    ${orderReceiptHTML(settings, o, orderPayments, true)}
+    <div class="doc-btns"><button class="btn btn-primary" onclick="window.print()">🖨 Print / Save as PDF</button>
+    <button class="btn btn-outline" onclick="window.close()">Close</button></div>
+    ${printNow ? '<script>window.onload=function(){setTimeout(function(){window.print()},400)}</script>' : ''}
+    </body></html>`;
+  openPrintWindow(html);
+}
 
 function receiptHTML(settings, p, orders, standalone) {
   const s = settings.settings;
